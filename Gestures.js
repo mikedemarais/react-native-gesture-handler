@@ -1,11 +1,11 @@
 import PropTypes from 'prop-types';
 import React from 'react';
 
-import createHandler from './createHandler';
+import createHandler, { createHandlerAndHook } from './createHandler';
 import GestureHandlerPropTypes from './GestureHandlerPropTypes';
 import PlatformConstants from './PlatformConstants';
 
-export const TapGestureHandler = createHandler(
+export const [TapGestureHandler, useTap] = createHandlerAndHook(
   'TapGestureHandler',
   {
     ...GestureHandlerPropTypes,
@@ -20,7 +20,7 @@ export const TapGestureHandler = createHandler(
   {}
 );
 
-export const FlingGestureHandler = createHandler(
+export const [FlingGestureHandler, useFling] = createHandlerAndHook(
   'FlingGestureHandler',
   {
     ...GestureHandlerPropTypes,
@@ -30,35 +30,39 @@ export const FlingGestureHandler = createHandler(
   {}
 );
 
+const forceWarn = console.warn(
+  'ForceTouchGestureHandler is not available on this platform. Please use ForceTouchGestureHandler.forceTouchAvailable to conditionally render other components that would provide a fallback behavior specific to your usecase'
+);
+
 class ForceTouchFallback extends React.Component {
   componentDidMount() {
-    console.warn(
-      'ForceTouchGestureHandler is not available on this platform. Please use ForceTouchGestureHandler.forceTouchAvailable to conditionally render other components that would provide a fallback behavior specific to your usecase'
-    );
+    forceWarn();
   }
   render() {
     return this.props.children;
   }
 }
 
-export const ForceTouchGestureHandler =
-  PlatformConstants && PlatformConstants.forceTouchAvailable
-    ? createHandler(
-        'ForceTouchGestureHandler',
-        {
-          ...GestureHandlerPropTypes,
-          minForce: PropTypes.number,
-          maxForce: PropTypes.number,
-          feedbackOnActivation: PropTypes.bool,
-        },
-        {}
-      )
-    : ForceTouchFallback;
+export const [
+  ForceTouchGestureHandler,
+  useForce,
+] = PlatformConstants.forceTouchAvailable
+  ? createHandlerAndHook(
+      'ForceTouchGestureHandler',
+      {
+        ...GestureHandlerPropTypes,
+        minForce: PropTypes.number,
+        maxForce: PropTypes.number,
+        feedbackOnActivation: PropTypes.bool,
+      },
+      {}
+    )
+  : [ForceTouchFallback, forceWarn];
 
 ForceTouchGestureHandler.forceTouchAvailable =
   (PlatformConstants && PlatformConstants.forceTouchAvailable) || false;
 
-export const LongPressGestureHandler = createHandler(
+export const [LongPressGestureHandler, useLongPress] = createHandlerAndHook(
   'LongPressGestureHandler',
   {
     ...GestureHandlerPropTypes,
@@ -225,7 +229,7 @@ function managePanProps(props) {
   return transformPanGestureHandlerProps(props);
 }
 
-export const PanGestureHandler = createHandler(
+export const [PanGestureHandler, usePan] = createHandlerAndHook(
   'PanGestureHandler',
   {
     ...GestureHandlerPropTypes,
@@ -266,12 +270,12 @@ export const PanGestureHandler = createHandler(
     failOffsetXEnd: true,
   }
 );
-export const PinchGestureHandler = createHandler(
+export const [PinchGestureHandler, usePinch] = createHandlerAndHook(
   'PinchGestureHandler',
   GestureHandlerPropTypes,
   {}
 );
-export const RotationGestureHandler = createHandler(
+export const [useRotation, RotationGestureHandler] = createHandlerAndHook(
   'RotationGestureHandler',
   GestureHandlerPropTypes,
   {}

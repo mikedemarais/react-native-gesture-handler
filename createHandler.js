@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   findNodeHandle as findNodeHandleRN,
   NativeModules,
@@ -129,6 +129,10 @@ const stateToPropMappings = {
   [State.END]: 'onEnded',
 };
 
+export function createHandlerAndHook(...args) {
+  return [createHandler(...args), createHook(...args)];
+}
+
 export default function createHandler(
   handlerName,
   propTypes = {},
@@ -211,6 +215,10 @@ export default function createHandler(
       this._config = newConfig;
 
       RNGestureHandlerModule.updateGestureHandler(this._handlerTag, newConfig);
+    };
+
+    _dropGestureHandler = () => {
+      RNGestureHandlerModule.dropGestureHandler(this._handlerTag);
     };
 
     componentWillUnmount() {
@@ -353,4 +361,139 @@ export default function createHandler(
     }
   }
   return Handler;
+}
+
+export function createHook(
+  handlerName,
+  propTypes = {},
+  config = {},
+  transformProps,
+  customNativeProps = {}
+) {
+  class Handler {
+    constructor(params) {
+      this.params = params;
+      this._handlerTag = handlerTag++;
+      this._config = {};
+      if (params.id) {
+        if (handlerIDToTag[params.id] !== undefined) {
+          throw new Error(`Handler with ID "${params.id}" already registered`);
+        }
+        handlerIDToTag[props.id] = this._handlerTag;
+      }
+    }
+
+    _refHandler = node => {
+      this._viewNode = node;
+    };
+
+    _onGestureHandlerEvent = event => {
+      if (event.nativeEvent.handlerTag === this._handlerTag) {
+        this.params.onGestureEvent && this.params.onGestureEvent(event);
+      }
+    };
+
+    _onGestureHandlerStateChange = event => {
+      if (event.nativeEvent.handlerTag === this._handlerTag) {
+        this.params.onHandlerStateChange &&
+          this.params.onHandlerStateChange(event);
+
+        const stateEventName = stateToPropMappings[event.nativeEvent.state];
+        if (typeof this.params[stateEventName] === 'function') {
+          this.params[stateEventName](event);
+        }
+      }
+    };
+
+    _createGestureHandler = newConfig => {
+      this._config = newConfig;
+      RNGestureHandlerModule.createGestureHandler(
+        handlerName,
+        this._handlerTag,
+        newConfig
+      );
+    };
+
+    _attachGestureHandler = newViewTag => {
+      this._viewTag = newViewTag;
+      RNGestureHandlerModule.attachGestureHandler(this._handlerTag, newViewTag);
+    };
+
+    _updateGestureHandler = newConfig => {
+      this._config = newConfig;
+      RNGestureHandlerModule.updateGestureHandler(this._handlerTag, newConfig);
+    };
+
+    _dropGestureHandler = () => {
+      RNGestureHandlerModule.dropGestureHandler(this._handlerTag);
+    };
+
+    dropGestureHandler() {
+      if (this._updateEnqueued) {
+        clearImmediate(this._updateEnqueued);
+      }
+      if (this.params.id) {
+        delete handlerIDToTag[this.params.id];
+      }
+    }
+
+    mountGestureHandler() {
+      if (hasUnresolvedRefs(this.params)) {
+        this._updateEnqueued = setImmediate(() => {
+          this._updateEnqueued = null;
+          this._update();
+        });
+      }
+
+      this._createGestureHandler(
+        filterConfig(
+          transformProps ? transformProps(this.params) : this.params,
+          { ...this.constructor.propTypes, ...customNativeProps },
+          config
+        )
+      );
+      this._attachGestureHandler(findNodeHandle(this._viewNode));
+    }
+
+    performUpdate() {
+      const viewTag = findNodeHandle(this._viewNode);
+      if (this._viewTag !== viewTag) {
+        this._attachGestureHandler(viewTag);
+      }
+      this._update();
+    }
+
+    _update() {
+      const newConfig = filterConfig(
+        transformProps ? transformProps(this.params) : this.params,
+        { ...this.constructor.propTypes, ...customNativeProps },
+        config
+      );
+      if (!deepEqual(this._config, newConfig)) {
+        this._updateGestureHandler(newConfig);
+      }
+    }
+  }
+  return function(params) {
+    const [currentHandler] = useState(new Handler(params));
+    useEffect(() => {
+      params.handlerRef && (params.handlerRef.current = currentHandler);
+      currentHandler.mountGestureHandler();
+      return () => currentHandler.dropGestureHandler();
+    }, []);
+
+    useEffect(() => {
+      if (deepEqual(currentHandler.props, params)) {
+        currentHandler.props = params;
+        currentHandler.performUpdate();
+      }
+    });
+
+    return {
+      onGestureHandlerEvent: params.onGestureEvent,
+      onGestureHandlerStateChange: params.onHandlerStateChange,
+      collapsable: false,
+      ref: currentHandler._refHandler,
+    };
+  };
 }
